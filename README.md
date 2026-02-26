@@ -4,17 +4,23 @@
 
 ## Scope
 
-- 配布可能な手順テンプレート
+- Kubernetes/Helm のベンダー非依存テンプレート
 - プレースホルダ化された設定例
+- on-prem 向けデプロイ/ロールバック/運用 runbook
 - 公開運用ポリシー
-- 公開用 runbook / platform テンプレート
 
 ## Repository Role
 
 - Public repository: `Ops`
 - Internal repository: `Ops-internal`
 
-内部専用の実運用ログ・履歴・環境固有スクリプトは `Ops-internal` で管理します。
+`Ops-internal` には、クラウド固有（GKE/Cloudflare）と社内運用情報を保持します。
+
+## Structure
+
+- `platform/kubernetes/` : on-prem Kubernetes 基準
+- `runbooks/onprem/` : on-prem 運用runbook
+- `policies/` : 公開範囲と分離ポリシー
 
 ## Safety Checks
 
