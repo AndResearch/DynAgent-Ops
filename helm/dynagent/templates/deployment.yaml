@@ -1,0 +1,153 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "dynagent.fullname" . }}
+  labels:
+    {{- include "dynagent.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.app.replicaCount }}
+  {{- end }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: {{ .Values.app.rollout.maxSurge }}
+      maxUnavailable: {{ .Values.app.rollout.maxUnavailable }}
+  selector:
+    matchLabels:
+      {{- include "dynagent.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "dynagent.selectorLabels" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "dynagent.serviceAccountName" . }}
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ include "dynagent.imageRef" (dict "repository" .Values.app.image.repository "tag" .Values.app.image.tag "digest" .Values.app.image.digest) }}"
+          imagePullPolicy: {{ .Values.app.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+          env:
+            # Database connection (DYNAGENT_ prefix required for Pydantic Settings)
+            - name: DYNAGENT_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.database.urlSecret.name }}
+                  key: {{ .Values.database.urlSecret.key }}
+            # JWT Authentication (0073)
+            - name: DYNAGENT_JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.auth.jwt.secretName }}
+                  key: {{ .Values.auth.jwt.secretKey }}
+            - name: DYNAGENT_JWT_ACCESS_TOKEN_EXPIRE_MINUTES
+              value: {{ .Values.auth.jwt.accessTokenExpireMinutes | quote }}
+            - name: DYNAGENT_JWT_REFRESH_TOKEN_EXPIRE_DAYS
+              value: {{ .Values.auth.jwt.refreshTokenExpireDays | quote }}
+            - name: DYNAGENT_PASSWORD_MIN_LENGTH
+              value: {{ .Values.auth.passwordMinLength | quote }}
+            # LLM API keys (0077)
+            {{- if .Values.llm.apiKeys.anthropic.secretName }}
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.llm.apiKeys.anthropic.secretName }}
+                  key: {{ .Values.llm.apiKeys.anthropic.secretKey }}
+            {{- end }}
+            {{- if .Values.llm.apiKeys.openai.secretName }}
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.llm.apiKeys.openai.secretName }}
+                  key: {{ .Values.llm.apiKeys.openai.secretKey }}
+            {{- end }}
+            # Worker provisioning (0075)
+            - name: DYNAGENT_WORKER_NAMESPACE
+              value: {{ .Values.worker.namespace | quote }}
+            - name: DYNAGENT_WORKER_IMAGE
+              value: "{{ include "dynagent.imageRef" (dict "repository" .Values.worker.image.repository "tag" .Values.worker.image.tag "digest" .Values.worker.image.digest) }}"
+            - name: DYNAGENT_WORKER_IMAGE_PULL_POLICY
+              value: {{ .Values.worker.image.pullPolicy | quote }}
+            {{- if .Values.worker.serviceAccount }}
+            - name: DYNAGENT_WORKER_SERVICE_ACCOUNT
+              value: {{ .Values.worker.serviceAccount | quote }}
+            {{- end }}
+            - name: DYNAGENT_WORKER_CPU_REQUEST
+              value: {{ .Values.worker.resources.requests.cpu | quote }}
+            - name: DYNAGENT_WORKER_CPU_LIMIT
+              value: {{ .Values.worker.resources.limits.cpu | quote }}
+            - name: DYNAGENT_WORKER_MEMORY_REQUEST
+              value: {{ .Values.worker.resources.requests.memory | quote }}
+            - name: DYNAGENT_WORKER_MEMORY_LIMIT
+              value: {{ .Values.worker.resources.limits.memory | quote }}
+            - name: DYNAGENT_WORKER_IDLE_TIMEOUT_MINUTES
+              value: {{ .Values.worker.idleTimeoutMinutes | quote }}
+            - name: DYNAGENT_WORKER_PRIVILEGED
+              value: {{ .Values.worker.privileged | quote }}
+            - name: DYNAGENT_WORKER_GRPC_PORT
+              value: {{ .Values.worker.grpcPort | quote }}
+            {{- if .Values.worker.cluster.endpoint }}
+            - name: DYNAGENT_WORKER_CLUSTER_ENDPOINT
+              value: {{ .Values.worker.cluster.endpoint | quote }}
+            {{- end }}
+            {{- if .Values.worker.cluster.ca }}
+            - name: DYNAGENT_WORKER_CLUSTER_CA
+              value: {{ .Values.worker.cluster.ca | quote }}
+            {{- end }}
+            {{- if .Values.worker.kubeconfig.secretName }}
+            - name: DYNAGENT_WORKER_KUBECONFIG
+              value: /var/run/dynagent/worker-kubeconfig/{{ .Values.worker.kubeconfig.secretKey }}
+            {{- end }}
+            {{- with .Values.app.env }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          resources:
+            {{- toYaml .Values.app.resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          envFrom:
+            - configMapRef:
+                name: {{ include "dynagent.fullname" . }}-config
+          {{- if .Values.worker.kubeconfig.secretName }}
+          volumeMounts:
+            - name: worker-kubeconfig
+              mountPath: /var/run/dynagent/worker-kubeconfig
+              readOnly: true
+          {{- end }}
+
+        {{- if and .Values.database.external .Values.database.cloudSQL.authProxy.enabled }}
+        # Cloud SQL Auth Proxy sidecar
+        - name: cloud-sql-proxy
+          image: {{ .Values.database.cloudSQL.authProxy.image }}
+          args:
+            - "--structured-logs"
+            - "--private-ip"
+            - "--port=5432"
+            - "{{ .Values.database.cloudSQL.instanceConnectionName }}"
+          securityContext:
+            runAsNonRoot: true
+          resources:
+            {{- toYaml .Values.database.cloudSQL.authProxy.resources | nindent 12 }}
+        {{- end }}
+      {{- if .Values.worker.kubeconfig.secretName }}
+      volumes:
+        - name: worker-kubeconfig
+          secret:
+            secretName: {{ .Values.worker.kubeconfig.secretName }}
+            items:
+              - key: {{ .Values.worker.kubeconfig.secretKey }}
+                path: {{ .Values.worker.kubeconfig.secretKey }}
+      {{- end }}

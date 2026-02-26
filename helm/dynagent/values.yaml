@@ -1,0 +1,217 @@
+# DynAgent Helm Chart Values (Public baseline)
+# This file is vendor-neutral and on-prem friendly.
+
+# グローバル設定
+global:
+  environment: production  # development | production
+
+# アプリケーション設定
+app:
+  replicaCount: 1
+  rollout:
+    maxSurge: "1"
+    maxUnavailable: "0"
+  image:
+    repository: dynagent/dynagent
+    tag: "v0.0.0"
+    digest: ""
+    pullPolicy: IfNotPresent
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+  env: []
+  # - name: LOG_LEVEL
+  #   value: "INFO"
+  # - name: DYNAGENT_CORS_ALLOWED_ORIGINS
+  #   value: "http://127.0.0.1:4173,http://localhost:4173"
+
+# データベース設定
+database:
+  # Cloud版: Cloud SQLを使用（external: true）
+  # オンプレ版: 内部PostgreSQLを使用（external: false）
+  external: false
+
+  # Cloud SQL設定（external: trueの場合）
+  cloudSQL:
+    enabled: false
+    instanceConnectionName: "<YOUR_INSTANCE_CONNECTION_NAME>"
+    # Auth Proxy設定
+    authProxy:
+      enabled: true
+      image: gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.8.0
+      resources:
+        requests:
+          cpu: 50m
+          memory: 64Mi
+        limits:
+          cpu: 100m
+          memory: 128Mi
+
+  # 接続設定
+  host: "127.0.0.1"  # Cloud SQL Auth Proxy使用時はlocalhost
+  port: 5432
+  name: dynagent
+  user: dynagent_app
+
+  # シークレット参照（Secret Managerまたはk8s Secret）
+  passwordSecret:
+    name: db-credentials
+    key: password
+
+  # DATABASE_URL全体をシークレットから取得
+  urlSecret:
+    name: database-url-secret
+    key: database-url
+
+# オンプレ版: 内部PostgreSQL（Bitnamiチャート使用）
+postgresql:
+  enabled: false  # Cloud版ではfalse、オンプレ版ではtrue
+
+  auth:
+    username: dynagent_app
+    database: dynagent
+    existingSecret: db-credentials
+    secretKeys:
+      adminPasswordKey: postgres-password
+      userPasswordKey: password
+
+  primary:
+    persistence:
+      enabled: true
+      size: 10Gi
+
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+
+# サービスアカウント
+serviceAccount:
+  create: true
+  name: dynagent-app
+  annotations: {}
+  # Cloud版でWorkload Identityを使用する場合
+  # annotations:
+  #   iam.gke.io/gcp-service-account: <YOUR_SERVICE_ACCOUNT_EMAIL>
+
+# 認証設定（0073）
+auth:
+  jwt:
+    # JWT署名用シークレット
+    secretName: jwt-credentials
+    secretKey: jwt-secret
+    # トークン有効期限（分）
+    accessTokenExpireMinutes: 15
+    # リフレッシュトークン有効期限（日）
+    refreshTokenExpireDays: 7
+  # パスワード要件
+  passwordMinLength: 12
+
+# シークレット（Secret Manager参照またはk8s Secret）
+secrets:
+  # GCP Secret Managerを使用する場合
+  useSecretManager: false
+  gcpProject: "<YOUR_PROJECT_ID>"
+
+# Ingress設定
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  # GKE Ingress用の例:
+  # annotations:
+  #   kubernetes.io/ingress.class: "gce"
+  #   kubernetes.io/ingress.global-static-ip-name: "dynagent-ip"
+  hosts:
+    - host: dynagent.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+  # TLS設定の例:
+  # tls:
+  #   - secretName: dynagent-tls
+  #     hosts:
+  #       - dynagent.example.com
+  managedCertificate:
+    enabled: false
+    name: ""
+    domains: []
+
+backendConfig:
+  enabled: false
+  name: dynagent-backendconfig
+  healthCheckPath: /health
+  timeoutSec: null
+
+# オートスケーリング設定
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 80
+  targetMemoryUtilizationPercentage: 80
+
+# アプリケーション設定（ConfigMap経由）
+config:
+  logLevel: INFO
+  llm:
+    provider: openai
+    model: gpt-4
+  llmProviders: []
+  # llmProviders:
+  #   - name: anthropic
+  #     api_key_env: ANTHROPIC_API_KEY
+  #     base_url: https://api.anthropic.com
+  #   - name: openai
+  #     api_key_env: OPENAI_API_KEY
+  #     base_url: https://api.openai.com
+  extra: {}
+  # extra:
+  #   DYNAGENT_DEPLOYMENT_MODE: "kubernetes"
+  #   CUSTOM_KEY: "custom_value"
+
+# LLM API keys (0077)
+llm:
+  apiKeys:
+    anthropic:
+      secretName: ""
+      secretKey: api-key
+    openai:
+      secretName: ""
+      secretKey: api-key
+
+# Worker provisioning (0075)
+worker:
+  namespace: dynagent-workers
+  image:
+    repository: dynagent/worker
+    tag: "v0.1.6"
+    digest: ""
+    pullPolicy: IfNotPresent
+  serviceAccount: "" # default ServiceAccount if empty
+  resources:
+    requests:
+      cpu: 250m
+      memory: 1Gi
+    limits:
+      cpu: 250m
+      memory: 1Gi
+  idleTimeoutMinutes: 30
+  privileged: true
+  grpcPort: 50051
+  cluster:
+    endpoint: ""
+    ca: ""
+  kubeconfig:
+    secretName: ""
+    secretKey: config

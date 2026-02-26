@@ -1,0 +1,48 @@
+# オンプレ版設定
+global:
+  environment: production
+
+app:
+  image:
+    repository: dynagent/dynagent
+    pullPolicy: Always
+
+config:
+  extra:
+    DYNAGENT_DEPLOYMENT_MODE: kubernetes
+
+database:
+  external: false
+  cloudSQL:
+    enabled: false
+    authProxy:
+      enabled: false
+
+  # 内部PostgreSQLを使用
+  host: ""  # Helmテンプレートで自動設定
+  port: 5432
+  name: dynagent
+  user: dynagent_app
+
+postgresql:
+  enabled: true
+
+  auth:
+    username: dynagent_app
+    database: dynagent
+    existingSecret: db-credentials
+    secretKeys:
+      adminPasswordKey: postgres-password
+      userPasswordKey: password
+
+  primary:
+    persistence:
+      enabled: true
+      size: 20Gi
+      storageClass: ""  # デフォルトのStorageClassを使用
+
+serviceAccount:
+  annotations: {}
+
+secrets:
+  useSecretManager: false

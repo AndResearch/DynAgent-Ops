@@ -1,0 +1,14 @@
+{{- if .Values.backendConfig.enabled -}}
+apiVersion: cloud.google.com/v1
+kind: BackendConfig
+metadata:
+  name: {{ .Values.backendConfig.name | default (include "dynagent.fullname" .) }}
+  labels:
+    {{- include "dynagent.labels" . | nindent 4 }}
+spec:
+  healthCheck:
+    requestPath: {{ .Values.backendConfig.healthCheckPath | quote }}
+  {{- if .Values.backendConfig.timeoutSec }}
+  timeoutSec: {{ .Values.backendConfig.timeoutSec }}
+  {{- end }}
+{{- end }}
