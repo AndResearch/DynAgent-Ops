@@ -1,0 +1,18 @@
+name: public-safety-guard
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  check:
+    # Enabled only in the public Ops repository where .ops-public-repo exists.
+    if: ${{ hashFiles('.ops-public-repo') != '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run public safety guard
+        run: ./scripts/public/check-public-safety.sh
+
