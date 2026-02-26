@@ -1,0 +1,8 @@
+# Require owner review for all public Ops changes
+* @Shinya-Kouda
+
+# Safety/Policy critical files
+SECURITY.md @Shinya-Kouda
+scripts/public/check-public-safety.sh @Shinya-Kouda
+policies/* @Shinya-Kouda
+.github/workflows/* @Shinya-Kouda

@@ -7,6 +7,7 @@
 - 配布可能な手順テンプレート
 - プレースホルダ化された設定例
 - 公開運用ポリシー
+- 公開用 runbook / platform テンプレート
 
 ## Repository Role
 
@@ -28,3 +29,8 @@
 ```bash
 make check-public-safety
 ```
+
+## Review Gates
+
+- CODEOWNERS: `.github/CODEOWNERS`
+- PR template: `.github/pull_request_template.md`
