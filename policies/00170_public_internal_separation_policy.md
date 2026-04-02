@@ -7,7 +7,7 @@ Define the final split policy between:
 - `Ops` (public distribution repository)
 - `Ops-internal` (internal-only operations repository)
 
-This policy is based on Request 00864 decision (2026-02-26).
+This policy is based on Request 00104 decision (2026-02-26).
 
 ## Repository Roles
 

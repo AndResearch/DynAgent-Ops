@@ -10,6 +10,8 @@ Standard deployment runbook for DynAgent on customer-managed Kubernetes.
 - Helm chart package available
 - Environment values file prepared (`values-<env>.yaml`)
 - Secrets provisioned in cluster or external secret provider
+- Decide where the package mirror should live for Worker dependency installation
+  (`in-cluster`, same private network/VPC, or other internal artifact host)
 
 ## Steps
 
@@ -18,6 +20,7 @@ Standard deployment runbook for DynAgent on customer-managed Kubernetes.
 3. Check rollout status for API and worker workloads.
 4. Validate ingress reachability and `/health`.
 5. Execute one smoke scenario (login + command execution).
+6. Record or confirm the package mirror placement plan for Worker dependency distribution.
 
 ## Example Commands
 
@@ -39,4 +42,3 @@ kubectl get pods -n <YOUR_NAMESPACE>
 - All required workloads are healthy
 - `/health` passes from ingress endpoint
 - Smoke scenario passes
-
