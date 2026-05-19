@@ -1,0 +1,19 @@
+# Grafana provisioning — Dashboards (Phase 6 Task 6e).
+#
+# Tells Grafana to auto-import every JSON under the mounted dashboards
+# directory.  Combined with a sidecar that watches a ConfigMap, this
+# gives "edit JSON → kubectl apply → dashboard updates" GitOps flow.
+
+apiVersion: 1
+
+providers:
+  - name: dynagent-phase6
+    orgId: 1
+    folder: DynAgent
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: false
+    options:
+      path: /var/lib/grafana/dashboards/dynagent
+      foldersFromFilesStructure: false

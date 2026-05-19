@@ -1,0 +1,152 @@
+# DynAgent Core Helm Values (Phase 6 Task 6d public baseline).
+#
+# Vendor-neutral / on-prem friendly defaults.  Cloud-specific overrides
+# (Workload Identity, BackendConfig, ManagedCertificate, etc.) live in
+# Ops-internal/helm/dynagent-core/values-cloud-{dev,staging,prod-*}.yaml.
+#
+# The chart deploys the distroless image produced by Phase 6 Task 6c
+# (gcr.io/distroless/cc-debian12:nonroot base, ~23 MB compressed).
+
+global:
+  environment: production  # development | staging | production
+
+# Application settings
+app:
+  replicaCount: 2  # PDB minAvailable=1 needs at least 2
+  rollout:
+    maxSurge: "1"
+    maxUnavailable: "0"
+  image:
+    repository: dynagent/dynagent-core
+    tag: "v0.6.0"
+    digest: ""                  # sha256:... — preferred over tag for prod
+    pullPolicy: IfNotPresent
+
+  # Phase 6 Task 6c distroless runs as nonroot:nonroot (UID 65532).
+  # Phase 6 Task 6d enforces it at the pod level too as defence-in-depth.
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 65532
+    runAsGroup: 65532
+    fsGroup: 65532
+    seccompProfile:
+      type: RuntimeDefault
+  securityContext:
+    allowPrivilegeEscalation: false
+    privileged: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop:
+        - ALL
+
+  # GKE Autopilot enforces request == limit for CPU+memory.  These match
+  # the Phase 6 Task 6c docker-compose.yml baseline (mem 512Mi / cpu 500m).
+  resources:
+    requests:
+      cpu: "500m"
+      memory: "512Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+
+  # Probes hit the Haskell core's /health endpoint (Phase 0 Task 0c).
+  # distroless has no shell, so httpGet (not CMD-SHELL) is required.
+  livenessProbe:
+    httpGet:
+      path: /health
+      port: http
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    timeoutSeconds: 3
+    failureThreshold: 3
+  readinessProbe:
+    httpGet:
+      path: /health
+      port: http
+    initialDelaySeconds: 3
+    periodSeconds: 5
+    timeoutSeconds: 2
+    failureThreshold: 2
+
+  # Extra env vars (rarely needed — most config lives in ConfigMap).
+  env: []
+  # - name: OTEL_EXPORTER_OTLP_ENDPOINT
+  #   value: "https://otel-collector.example:4317"
+
+# Application configuration (rendered into ConfigMap).
+config:
+  # warp listen port — matches Dockerfile EXPOSE.
+  port: 8080
+  # GHC RTS knobs (Phase 6 Task 6a §6a-③ baseline).  GHC honours GHCRTS
+  # automatically on startup so this works without rebaking flags.
+  # See dynagent-core/README.md §Performance profiling 運用.
+  ghcRts: "-A64m -H256m -T"
+  # Optional OTLP exporter endpoint (Phase 0 Task 0j + Phase 6 R-13 verify).
+  otlpEndpoint: ""
+
+# Service (ClusterIP — internal only; the Python App talks to it via
+# the in-cluster DNS name).  Phase 6 leaves it ClusterIP; promotion to
+# LoadBalancer is a downstream values override if external clients
+# need it (NOT recommended — keep core internal).
+service:
+  type: ClusterIP
+  port: 8080  # service-side port
+  metricsPath: /metrics
+
+# HPA (Phase 6 Task 6d, plan v1.0 §7 「HPA が機能する」 到達条件).
+# Disabled by default in public baseline (on-prem use cases may run a
+# fixed replicaCount); cloud values enable it.
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+  # Optional custom-metric scaling on req-rate.  Requires Prometheus
+  # Adapter (or Stackdriver custom-metric).  Phase 6 Task 6d leaves it
+  # off by default; turn on via values override when the adapter is wired.
+  customMetric:
+    enabled: false
+    name: dynagent_step_requests_per_second
+    targetAverageValue: "100"
+
+# PDB (Phase 6 Task 6d「zone-failure 耐性」).
+pdb:
+  enabled: true
+  minAvailable: 1
+  # maxUnavailable: 1   # alternative — pick one, not both
+
+# ServiceAccount.  Workload Identity annotation lands in cloud values.
+serviceAccount:
+  create: true
+  name: dynagent-core
+  annotations: {}
+  # Cloud Workload Identity example (placeholder — Ops public baseline keeps
+  # the SA name generic; concrete dynagent-core@<project>.iam... goes in
+  # Ops-internal/helm/dynagent-core/values-cloud-{env}.yaml):
+  # annotations:
+  #   iam.gke.io/gcp-service-account: <YOUR_SERVICE_ACCOUNT_EMAIL>
+
+# ServiceMonitor (Prometheus Operator).  Disabled by default since not
+# every cluster runs prometheus-operator; turn on if it is installed
+# so the Phase 6 Task 6e Grafana dashboard discovers the /metrics
+# endpoint without manual configuration.
+serviceMonitor:
+  enabled: false
+  interval: 15s
+  scrapeTimeout: 10s
+  labels: {}     # extra labels (e.g. release: prometheus)
+
+# Pod-scheduling knobs (left empty in baseline; cloud values may set
+# preferredDuringSchedulingIgnoredDuringExecution to spread pods).
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# Annotations / labels propagated onto the pod template.
+podAnnotations: {}
+podLabels: {}
+
+# Top-of-chart overrides (rarely used).
+nameOverride: ""
+fullnameOverride: ""

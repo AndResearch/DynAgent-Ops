@@ -1,0 +1,43 @@
+# Phase 6 Task 6e — static scrape config for dynagent-core.
+#
+# Use this when the cluster does NOT run prometheus-operator (i.e. the
+# Helm chart's ServiceMonitor template is disabled or absent).  Drop
+# the file into Prometheus's `scrape_configs:` array via include or
+# Helm subchart values.
+#
+# When prometheus-operator IS installed, the dynagent-core Helm chart's
+# templates/servicemonitor.yaml (Phase 6 Task 6d) handles discovery and
+# this file is redundant.
+#
+# Source values (defaults — override in Ops-internal/prometheus/
+# scrape-configs/dynagent-core.yaml per env):
+#   * namespace               : dynagent
+#   * label selector          : app.kubernetes.io/name=dynagent-core
+#   * port name               : http
+#   * metrics path            : /metrics
+#   * scrape interval         : 15s
+#   * scrape timeout          : 10s
+
+- job_name: dynagent-core
+  scrape_interval: 15s
+  scrape_timeout: 10s
+  metrics_path: /metrics
+  scheme: http
+  kubernetes_sd_configs:
+    - role: pod
+      namespaces:
+        names:
+          - dynagent
+  relabel_configs:
+    - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_name]
+      action: keep
+      regex: dynagent-core
+    - source_labels: [__meta_kubernetes_pod_container_port_name]
+      action: keep
+      regex: http
+    - source_labels: [__meta_kubernetes_pod_name]
+      target_label: pod
+    - source_labels: [__meta_kubernetes_namespace]
+      target_label: namespace
+    - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_instance]
+      target_label: helm_release

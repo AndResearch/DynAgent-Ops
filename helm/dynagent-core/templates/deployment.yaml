@@ -1,0 +1,101 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "dynagent-core.fullname" . }}
+  labels:
+    {{- include "dynagent-core.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.app.replicaCount }}
+  {{- end }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: {{ .Values.app.rollout.maxSurge }}
+      maxUnavailable: {{ .Values.app.rollout.maxUnavailable }}
+  selector:
+    matchLabels:
+      {{- include "dynagent-core.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "dynagent-core.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      annotations:
+        # Phase 6 Task 6e: tell Prometheus to scrape /metrics directly
+        # (an alternative path to ServiceMonitor for clusters that do
+        # not run prometheus-operator).
+        prometheus.io/scrape: "true"
+        prometheus.io/port: {{ .Values.service.port | quote }}
+        prometheus.io/path: {{ .Values.service.metricsPath | quote }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "dynagent-core.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.app.podSecurityContext | nindent 8 }}
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ include "dynagent-core.imageRef" .Values.app.image }}"
+          imagePullPolicy: {{ .Values.app.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.app.securityContext | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.config.port }}
+              protocol: TCP
+          env:
+            - name: DYNAGENT_CORE_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "dynagent-core.fullname" . }}-config
+                  key: DYNAGENT_CORE_PORT
+            - name: GHCRTS
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "dynagent-core.fullname" . }}-config
+                  key: GHCRTS
+            {{- if .Values.config.otlpEndpoint }}
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "dynagent-core.fullname" . }}-config
+                  key: OTEL_EXPORTER_OTLP_ENDPOINT
+            {{- end }}
+            {{- with .Values.app.env }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          resources:
+            {{- toYaml .Values.app.resources | nindent 12 }}
+          livenessProbe:
+            {{- toYaml .Values.app.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.app.readinessProbe | nindent 12 }}
+          # Phase 6 Task 6c distroless image is readOnlyRootFilesystem
+          # at the container securityContext level — warp itself needs
+          # no writable volume, but the GHC RTS wants /tmp for
+          # eventlog dumps (only when GHCRTS includes '-l'); we surface
+          # an emptyDir for it so the readonly-root constraint holds.
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir:
+            medium: Memory
+            sizeLimit: 64Mi
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

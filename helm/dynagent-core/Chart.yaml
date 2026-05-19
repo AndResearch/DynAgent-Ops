@@ -1,0 +1,13 @@
+apiVersion: v2
+name: dynagent-core
+description: DynAgent v2 Haskell Core — Functional Core / Imperative Shell, pure HTTP/JSON boundary
+type: application
+version: 0.1.0
+appVersion: "0.6.0"
+keywords:
+  - dynagent
+  - haskell
+  - agent-platform
+maintainers:
+  - name: Shinya Koda
+    email: shinya.kouda@gmail.com

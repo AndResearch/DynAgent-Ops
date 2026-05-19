@@ -1,0 +1,44 @@
+{{- if .Values.autoscaling.enabled }}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "dynagent-core.fullname" . }}
+  labels:
+    {{- include "dynagent-core.labels" . | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "dynagent-core.fullname" . }}
+  minReplicas: {{ .Values.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.autoscaling.maxReplicas }}
+  metrics:
+    {{- if .Values.autoscaling.targetCPUUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.autoscaling.targetCPUUtilizationPercentage }}
+    {{- end }}
+    {{- if .Values.autoscaling.targetMemoryUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.autoscaling.targetMemoryUtilizationPercentage }}
+    {{- end }}
+    {{- if .Values.autoscaling.customMetric.enabled }}
+    # Custom-metric scaling on Prometheus-derived request rate.
+    # Requires prometheus-adapter (or Stackdriver custom-metric).
+    # Phase 6 Task 6f wires the alerting threshold on the same metric.
+    - type: Pods
+      pods:
+        metric:
+          name: {{ .Values.autoscaling.customMetric.name | quote }}
+        target:
+          type: AverageValue
+          averageValue: {{ .Values.autoscaling.customMetric.targetAverageValue | quote }}
+    {{- end }}
+{{- end }}

@@ -1,0 +1,60 @@
+# Phase 6 Task 6f — Alertmanager routing example for DynAgent alerts.
+#
+# Drop into Alertmanager's main config as the value of `route:` or
+# merge into an existing route tree (e.g. via Helm chart for
+# kube-prometheus-stack's `alertmanager.config.route`).
+#
+# The structure:
+#
+#   * P1 alerts (page) → on-call PagerDuty / Slack #dynagent-page.
+#   * P2 alerts (business-hours) → Slack #dynagent-ops.
+#   * P3 alerts (monitoring) → Slack #dynagent-watch + email digest.
+#
+# Receiver definitions are environment-specific and live in
+# Ops-internal/alertmanager/dynagent-receivers-{env}.yaml (PagerDuty
+# routing key + Slack webhook).
+
+route:
+  group_by: ['alertname', 'severity', 'component']
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  receiver: dynagent-default
+  routes:
+    - matchers:
+        - 'component="dynagent-core"'
+        - 'severity="P1"'
+      receiver: dynagent-page
+      group_wait: 10s
+      repeat_interval: 30m
+    - matchers:
+        - 'component="dynagent-core"'
+        - 'severity="P2"'
+      receiver: dynagent-ops
+      repeat_interval: 2h
+    - matchers:
+        - 'component="dynagent-core"'
+        - 'severity="P3"'
+      receiver: dynagent-watch
+      repeat_interval: 12h
+
+inhibit_rules:
+  # If the whole core is down (P1), suppress secondary efficiency /
+  # latency alerts — they all derive from the same outage.
+  - source_matchers: ['alertname="DynAgentCoreDown"']
+    target_matchers: ['component="dynagent-core"']
+    equal: ['component']
+
+# Receiver definitions are intentionally placeholders.  Replace with
+# concrete PagerDuty integration_url / Slack webhook from your secret
+# store (Phase 6 Task 6.post wires the GCP Secret Manager → Alertmanager
+# config rendering pipeline).
+receivers:
+  - name: dynagent-default
+    # Default sink — keep silent.  Real environments override this.
+  - name: dynagent-page
+    # PagerDuty + Slack #dynagent-page.  Filled in Ops-internal.
+  - name: dynagent-ops
+    # Slack #dynagent-ops.
+  - name: dynagent-watch
+    # Slack #dynagent-watch + email digest.

@@ -1,0 +1,102 @@
+# Phase 6 Task 6f — Prometheus alerting rules (standalone form).
+#
+# Reference into Prometheus's main config via:
+#   rule_files:
+#     - /etc/prometheus/rules/dynagent_phase6_standalone.yaml
+#
+# Same rules as dynagent_phase6.yaml (PrometheusRule CRD form) — only
+# the top-level wrapper differs.  Keep both in lockstep when editing
+# rules.
+
+groups:
+  - name: dynagent.recording
+    interval: 30s
+    rules:
+      - record: dynagent:step_request_rate:5m
+        expr: rate(dynagent_step_requests_total[5m])
+
+      - record: dynagent:betaapo_decide_rate:5m
+        expr: rate(dynagent_betaapo_decide_requests_total[5m])
+
+      - record: dynagent:check_invariants_rate:5m
+        expr: rate(dynagent_check_invariants_requests_total[5m])
+
+      - record: dynagent:invariant_violations:5m
+        expr: increase(dynagent_invariant_violations_total[5m])
+
+      - record: dynagent:experiment_total_rate:5m
+        expr: |
+          sum(rate(dynagent_experiment_treatment_assign_requests_total[5m]))
+          + sum(rate(dynagent_experiment_eta_op_requests_total[5m]))
+          + sum(rate(dynagent_experiment_aug_err_sum_requests_total[5m]))
+          + sum(rate(dynagent_experiment_xcross_doubly_robust_requests_total[5m]))
+          + sum(rate(dynagent_experiment_sample_size_requests_total[5m]))
+
+  - name: dynagent.alerts.efficiency
+    interval: 30s
+    rules:
+      - alert: DynAgentEtaOpDegraded
+        expr: dynagent_experiment_eta_op_value < 0.1
+        for: 10m
+        labels:
+          severity: P2
+          component: dynagent-core
+          metric: eta_op
+        annotations:
+          summary: "η^op below 0.1 (operational efficiency degraded)"
+          description: "Operational efficiency η^op = R_int.numerator / Σ error numerators < 0.1 for 10m. Recent: {{ $value }}."
+
+  - name: dynagent.alerts.invariant
+    interval: 30s
+    rules:
+      - alert: DynAgentInvariantViolationSurge
+        expr: dynagent:invariant_violations:5m > 5
+        for: 5m
+        labels:
+          severity: P1
+          component: dynagent-core
+          metric: invariant_violations
+        annotations:
+          summary: "Invariant violations rate > 1/min (Trans-N regression hot zone)"
+          description: "dynagent_invariant_violations_total ≥ 5 events / 5min sustained. Recent: {{ $value }}."
+
+      - alert: DynAgentInvariantViolationDoubled
+        expr: |
+          dynagent:invariant_violations:5m
+          > 2 * avg_over_time(dynagent:invariant_violations:5m[24h])
+        for: 10m
+        labels:
+          severity: P2
+          component: dynagent-core
+          metric: invariant_violations_relative
+        annotations:
+          summary: "Invariant violations rate ≥ 2× 24h baseline"
+
+  - name: dynagent.alerts.latency
+    interval: 30s
+    rules:
+      - alert: DynAgentStepRequestRateAnomaly
+        expr: dynagent:step_request_rate:5m > 100
+        for: 10m
+        labels:
+          severity: P3
+          component: dynagent-core
+          metric: step_request_rate
+        annotations:
+          summary: "Haskell core step request rate > 100 RPS (latency proxy)"
+          description: "p95 histogram は Phase 7 候補、本 alert は rate 絶対値で代替."
+
+  - name: dynagent.alerts.availability
+    interval: 30s
+    rules:
+      - alert: DynAgentCoreDown
+        expr: |
+          absent(dynagent_health_requests_total) == 1
+          or up{job=~"dynagent-core.*"} == 0
+        for: 2m
+        labels:
+          severity: P1
+          component: dynagent-core
+          metric: availability
+        annotations:
+          summary: "Haskell core /metrics unreachable (pod / scrape down)"

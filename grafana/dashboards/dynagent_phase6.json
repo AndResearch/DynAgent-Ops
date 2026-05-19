@@ -1,0 +1,213 @@
+{
+  "title": "DynAgent — Phase 6 (AugErrSum 5-term + η^op + X^DR + invariant violations)",
+  "uid": "dynagent-phase6",
+  "tags": ["dynagent", "phase6", "aug-err-sum", "categorical"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "editable": true,
+  "graphTooltip": 0,
+  "description": "DynAgent v2 Phase 6 Task 6e + 6g completion dashboard. Surfaces the (AugErrSum) 6-term ratio panel (Phase 3 4-term + Phase 5 eHist + Phase 6g rVis) + η^op + X^DR (Phase 5d/5e) + Phase 4 invariant-violations breakdown + Phase 6g three-tier visualisation breakdown (L1 type / L2 invariant / L3 integration) + Phase 5 Haskell-core request counters.",
+  "time": {"from": "now-6h", "to": "now"},
+  "templating": {
+    "list": [
+      {
+        "name": "datasource_app",
+        "type": "datasource",
+        "label": "App FastAPI (JSON)",
+        "query": "marcusolsson-json-datasource",
+        "current": {"text": "DynAgent App JSON", "value": "DynAgent App JSON"}
+      },
+      {
+        "name": "datasource_prom",
+        "type": "datasource",
+        "label": "Prometheus",
+        "query": "prometheus",
+        "current": {"text": "Prometheus", "value": "Prometheus"}
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "row",
+      "title": "C0354 — (AugErrSum) 4-term ratio panel (Phase 3 / source: App FastAPI)",
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 0},
+      "collapsed": false
+    },
+    {
+      "id": 10,
+      "type": "stat",
+      "title": "E_rep — representation error ratio",
+      "description": "Phase 2 (AugErrSum). Mode A/B/C/E + llm_parse_error events / RecursiveDecomposition initiations. Source: App GET /api/sessions/metrics/aug-err-sum -> eRep.ratio.",
+      "gridPos": {"h": 6, "w": 6, "x": 0, "y": 1},
+      "datasource": {"type": "marcusolsson-json-datasource", "uid": "${datasource_app}"},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "decimals": 3,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 0.05},
+              {"color": "red", "value": 0.15}
+            ]
+          },
+          "noValue": "—"
+        }
+      },
+      "options": {"reduceOptions": {"calcs": ["last"]}, "graphMode": "area"},
+      "targets": [{"refId": "A", "url": "/api/sessions/metrics/aug-err-sum", "method": "GET", "queryType": "json", "format": "table", "parser": "backend", "computed_columns": [], "filters": [], "root_selector": "eRep.ratio"}]
+    },
+    {
+      "id": 11,
+      "type": "stat",
+      "title": "E_ver — verification error ratio",
+      "description": "Phase 2 (AugErrSum). materialize_handoff_failed + artifact_owner_violation + ... / denominator. Source: App GET /api/sessions/metrics/aug-err-sum -> eVer.ratio.",
+      "gridPos": {"h": 6, "w": 6, "x": 6, "y": 1},
+      "datasource": {"type": "marcusolsson-json-datasource", "uid": "${datasource_app}"},
+      "fieldConfig": {"defaults": {"unit": "percentunit", "decimals": 3, "noValue": "—", "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 0.05}, {"color": "red", "value": 0.15}]}}},
+      "options": {"reduceOptions": {"calcs": ["last"]}, "graphMode": "area"},
+      "targets": [{"refId": "A", "url": "/api/sessions/metrics/aug-err-sum", "method": "GET", "queryType": "json", "format": "table", "parser": "backend", "root_selector": "eVer.ratio"}]
+    },
+    {
+      "id": 12,
+      "type": "stat",
+      "title": "E_dec — decomposition error ratio",
+      "description": "Phase 3 (AugErrSum). depth_exceeded + replay_detected + may_decompose_false + sub_workflow_compile_failed + materialization_incomplete + agent_fallback + approval_gate_unavailable + auto_denied + degraded_retry_failed / denominator. Source: App GET /api/sessions/metrics/aug-err-sum -> eDec.ratio.",
+      "gridPos": {"h": 6, "w": 6, "x": 12, "y": 1},
+      "datasource": {"type": "marcusolsson-json-datasource", "uid": "${datasource_app}"},
+      "fieldConfig": {"defaults": {"unit": "percentunit", "decimals": 3, "noValue": "—", "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 0.05}, {"color": "red", "value": 0.15}]}}},
+      "options": {"reduceOptions": {"calcs": ["last"]}, "graphMode": "area"},
+      "targets": [{"refId": "A", "url": "/api/sessions/metrics/aug-err-sum", "method": "GET", "queryType": "json", "format": "table", "parser": "backend", "root_selector": "eDec.ratio"}]
+    },
+    {
+      "id": 13,
+      "type": "stat",
+      "title": "R_int — intervention reduction ratio",
+      "description": "Phase 1 (AugErrSum). degraded_retry_succeeded + auto_approved / denominator. Higher is better. Source: App GET /api/sessions/metrics/aug-err-sum -> rInt.ratio.",
+      "gridPos": {"h": 6, "w": 6, "x": 18, "y": 1},
+      "datasource": {"type": "marcusolsson-json-datasource", "uid": "${datasource_app}"},
+      "fieldConfig": {"defaults": {"unit": "percentunit", "decimals": 3, "noValue": "—", "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "yellow", "value": 0.1}, {"color": "green", "value": 0.3}]}}},
+      "options": {"reduceOptions": {"calcs": ["last"]}, "graphMode": "area"},
+      "targets": [{"refId": "A", "url": "/api/sessions/metrics/aug-err-sum", "method": "GET", "queryType": "json", "format": "table", "parser": "backend", "root_selector": "rInt.ratio"}]
+    },
+    {
+      "id": 2,
+      "type": "row",
+      "title": "Phase 5 additions: E_hist + η^op + X^DR (source: App FastAPI + Prometheus)",
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 7},
+      "collapsed": false
+    },
+    {
+      "id": 20,
+      "type": "stat",
+      "title": "E_hist — history error ratio",
+      "description": "Phase 5 (AugErrSum). SavedPlanningState 欠損 + HistorySnapshot missing-trial counts + cross-step state divergence / denominator. Source: App GET /api/sessions/metrics/aug-err-sum -> eHist.ratio.",
+      "gridPos": {"h": 6, "w": 6, "x": 0, "y": 8},
+      "datasource": {"type": "marcusolsson-json-datasource", "uid": "${datasource_app}"},
+      "fieldConfig": {"defaults": {"unit": "percentunit", "decimals": 3, "noValue": "—", "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 0.05}, {"color": "red", "value": 0.15}]}}},
+      "options": {"reduceOptions": {"calcs": ["last"]}, "graphMode": "area"},
+      "targets": [{"refId": "A", "url": "/api/sessions/metrics/aug-err-sum", "method": "GET", "queryType": "json", "format": "table", "parser": "backend", "root_selector": "eHist.ratio"}]
+    },
+    {
+      "id": 21,
+      "type": "stat",
+      "title": "η^op — operational efficiency (Python aggregate)",
+      "description": "Phase 5 Task 5d. R_int.numerator / Σ(error term numerators). Higher is better. Source: App GET /api/sessions/metrics/eta-op -> value. Parallel implementation to Haskell POST /experiment/eta-op (dashboard reads Python path to avoid Haskell process dependency for the visualisation surface).",
+      "gridPos": {"h": 6, "w": 6, "x": 6, "y": 8},
+      "datasource": {"type": "marcusolsson-json-datasource", "uid": "${datasource_app}"},
+      "fieldConfig": {"defaults": {"unit": "percentunit", "decimals": 3, "noValue": "—", "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "yellow", "value": 0.1}, {"color": "green", "value": 0.3}]}}},
+      "options": {"reduceOptions": {"calcs": ["last"]}, "graphMode": "area"},
+      "targets": [{"refId": "A", "url": "/api/sessions/metrics/eta-op", "method": "GET", "queryType": "json", "format": "table", "parser": "backend", "root_selector": "value"}]
+    },
+    {
+      "id": 22,
+      "type": "timeseries",
+      "title": "η^op — Prometheus gauge (last-call value on Haskell /experiment/eta-op)",
+      "description": "Phase 5 Task 5d. Haskell core writes the most recent computed η^op into the dynagent_experiment_eta_op_value gauge on every POST. NaN encodes 'undefined'. Use this panel side-by-side with the Python-aggregated panel #21 to verify Haskell ↔ Python parity (D-18 candidate verification).",
+      "gridPos": {"h": 6, "w": 6, "x": 12, "y": 8},
+      "datasource": {"type": "prometheus", "uid": "${datasource_prom}"},
+      "fieldConfig": {"defaults": {"unit": "percentunit", "decimals": 3, "noValue": "—"}},
+      "targets": [{"refId": "A", "expr": "dynagent_experiment_eta_op_value", "legendFormat": "η^op (Haskell last-call)"}]
+    },
+    {
+      "id": 23,
+      "type": "stat",
+      "title": "X^DR — last DR contrast (Python AIPW)",
+      "description": "Phase 5 Task 5e. POST /api/sessions/metrics/xcross-doubly-robust returns per-arm DR contrasts (AIPW when features non-empty, Hájek IPW fallback otherwise). This panel displays the last-computed treatment-vs-baseline contrast point_estimate. Panel value is a stub until the Phase 6 Task 6e orchestrator wires periodic POSTs from a scheduled job (Task 6.post candidate).",
+      "gridPos": {"h": 6, "w": 6, "x": 18, "y": 8},
+      "datasource": {"type": "marcusolsson-json-datasource", "uid": "${datasource_app}"},
+      "fieldConfig": {"defaults": {"decimals": 3, "noValue": "—"}},
+      "options": {"reduceOptions": {"calcs": ["last"]}, "graphMode": "area"},
+      "targets": [{"refId": "A", "url": "/api/sessions/metrics/xcross-doubly-robust", "method": "POST", "queryType": "json", "format": "table", "parser": "backend", "root_selector": "point_estimate", "_note": "Body must carry a non-empty samples array; Phase 6 Task 6.post wires a scheduled producer."}]
+    },
+    {
+      "id": 24,
+      "type": "stat",
+      "title": "R_vis — visualisation reduction (Phase 6 Task 6g)",
+      "description": "Phase 6 Task 6g (Ch 18.4 three-tier failure visualisation). R_vis = (L2 Warning + L3 Info violations) / total visualisation-observable steps. L1 Critical violations are reported in panel #25 for transparency but NOT in the numerator (those belong in E_* terms — see Categorical/Visualisation.hs module header for the layer ↔ severity binding). Higher is better. Source: App GET /api/sessions/metrics/visualization -> value.",
+      "gridPos": {"h": 6, "w": 6, "x": 0, "y": 14},
+      "datasource": {"type": "marcusolsson-json-datasource", "uid": "${datasource_app}"},
+      "fieldConfig": {"defaults": {"unit": "percentunit", "decimals": 3, "noValue": "—", "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "yellow", "value": 0.1}, {"color": "green", "value": 0.3}]}}},
+      "options": {"reduceOptions": {"calcs": ["last"]}, "graphMode": "area"},
+      "targets": [{"refId": "A", "url": "/api/sessions/metrics/visualization", "method": "GET", "queryType": "json", "format": "table", "parser": "backend", "root_selector": "value"}]
+    },
+    {
+      "id": 25,
+      "type": "barchart",
+      "title": "R_vis three-tier breakdown (L1 / L2 / L3 counts)",
+      "description": "Phase 6 Task 6g. Per-tier violation counts that feed R_vis: L1 (Critical / type-level), L2 (Warning / invariant-property), L3 (Info / integration). L1 is shown for operator awareness — Critical violations belong in E_* terms (E_rep / E_ver / E_dec / E_hist) and are excluded from the R_vis numerator. Surfaces Ch 18.4 three-tier structure end-to-end on the dashboard. Source: App GET /api/sessions/metrics/visualization -> {l1_count, l2_count, l3_count}.",
+      "gridPos": {"h": 6, "w": 6, "x": 6, "y": 14},
+      "datasource": {"type": "marcusolsson-json-datasource", "uid": "${datasource_app}"},
+      "targets": [{"refId": "A", "url": "/api/sessions/metrics/visualization", "method": "GET", "queryType": "json", "format": "table", "parser": "backend", "root_selector": "$.{l1_count,l2_count,l3_count}"}]
+    },
+    {
+      "id": 3,
+      "type": "row",
+      "title": "Phase 4 invariant violations + Phase 5 Haskell-core request rates",
+      "gridPos": {"h": 1, "w": 24, "x": 0, "y": 20},
+      "collapsed": false
+    },
+    {
+      "id": 30,
+      "type": "barchart",
+      "title": "Invariant violation breakdown by triage outcome",
+      "description": "Phase 4 Task 4d. (abort / log_continue / log_only / ok) buckets over the dashboard time window. Phase 4 is advisory-only (abort_count is informational, no Stop(InvariantViolated) raise). Phase 6 Task 6.post + C0358 candidate wires the production flow swap once the abort base-rate is measured.",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 21},
+      "datasource": {"type": "marcusolsson-json-datasource", "uid": "${datasource_app}"},
+      "targets": [{"refId": "A", "url": "/api/sessions/metrics/invariant-violations", "method": "GET", "queryType": "json", "format": "table", "parser": "backend", "root_selector": "triage_counts"}]
+    },
+    {
+      "id": 31,
+      "type": "timeseries",
+      "title": "Haskell core request rate (5-min average)",
+      "description": "Phase 0 Task 0j + Phase 5 Task 5c. Prometheus counter rate over the dashboard window. Surfaces (a) operator-visible throughput by endpoint, (b) Phase 6 Task 6f alert correlation (step request p95 > 5s rule reads the same counter family). Custom-metric HPA scaling (Task 6d hpa.yaml) reads dynagent_step_requests_total — this panel surfaces the same series.",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 21},
+      "datasource": {"type": "prometheus", "uid": "${datasource_prom}"},
+      "fieldConfig": {"defaults": {"unit": "reqps"}},
+      "targets": [
+        {"refId": "A", "expr": "rate(dynagent_step_requests_total[5m])", "legendFormat": "/step"},
+        {"refId": "B", "expr": "rate(dynagent_betaapo_decide_requests_total[5m])", "legendFormat": "/betaapo-decide"},
+        {"refId": "C", "expr": "rate(dynagent_check_invariants_requests_total[5m])", "legendFormat": "/check-invariants"},
+        {"refId": "D", "expr": "rate(dynagent_experiment_eta_op_requests_total[5m])", "legendFormat": "/experiment/eta-op"},
+        {"refId": "E", "expr": "rate(dynagent_experiment_treatment_assign_requests_total[5m])", "legendFormat": "/experiment/treatment-assign"},
+        {"refId": "F", "expr": "rate(dynagent_experiment_aug_err_sum_requests_total[5m])", "legendFormat": "/experiment/aug-err-sum"},
+        {"refId": "G", "expr": "rate(dynagent_experiment_xcross_doubly_robust_requests_total[5m])", "legendFormat": "/experiment/xcross-doubly-robust"},
+        {"refId": "H", "expr": "rate(dynagent_experiment_sample_size_requests_total[5m])", "legendFormat": "/experiment/sample-size"}
+      ]
+    },
+    {
+      "id": 40,
+      "type": "timeseries",
+      "title": "Cumulative invariant violations emitted (counter)",
+      "description": "Phase 4 Task 4d. dynagent_invariant_violations_total — monotonic counter incremented once per Violation emitted by /check-invariants. Spike pattern indicates a (Trans-N) regression hot zone; correlate with panel #30 to identify which triage outcome dominates the surge.",
+      "gridPos": {"h": 6, "w": 24, "x": 0, "y": 29},
+      "datasource": {"type": "prometheus", "uid": "${datasource_prom}"},
+      "fieldConfig": {"defaults": {"unit": "short"}},
+      "targets": [{"refId": "A", "expr": "increase(dynagent_invariant_violations_total[5m])", "legendFormat": "violations / 5min"}]
+    }
+  ]
+}

@@ -1,0 +1,190 @@
+# Phase 6 Task 6f — Prometheus alerting rules (PrometheusRule CRD form).
+#
+# Targets prometheus-operator's monitoring.coreos.com/v1.PrometheusRule.
+# For standalone Prometheus (no operator), drop the `.spec.groups`
+# block into Prometheus's `rule_files:` via the sibling
+# `dynagent_phase6_standalone.yaml`.
+#
+# Threshold rationale (Phase 6 着手前判断 §6f):
+#
+#   * Phase 5 LLM 実走 base rate (η^op / invariant violation 率 / step
+#     latency p95) は未計測 — 本ファイルは「Phase 6 起動時点での起点
+#     値」を pin する.  Phase 6 Task 6.post / C0358 候補で Phase 5 実走
+#     データ確認後に refine する.
+#   * 初期 threshold は「明らかに異常」レベルに設定 — false-positive を
+#     許容しても production page を漏らさない方向.  運用負担が出たら
+#     base rate 観測 (Phase 7) で締める.
+#   * NaN 取扱い: `dynagent_experiment_eta_op_value` は computeEtaOp が
+#     Nothing を返した時 NaN を expose する (Telemetry/Prometheus.hs §
+#     etaOpValueGauge コメント).  PromQL の比較演算子 (<) は NaN との
+#     比較を false 評価するので追加 guard は不要 — η^op が未定義の状態
+#     では alert は発火しない.
+#
+# Severity 軸 (Phase 6 起点):
+#   P1 → 即時対応 (オンコール page、業務影響大)
+#   P2 → 営業時間内対応 (劣化指標、復帰必要)
+#   P3 → 監視のみ (ダッシュボード綴り直し / regression 候補)
+
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: dynagent-phase6
+  labels:
+    release: prometheus              # prometheus-operator が拾う label
+    app.kubernetes.io/part-of: dynagent
+    app.kubernetes.io/component: dynagent-core
+spec:
+  groups:
+    # ------------------------------------------------------------------
+    # Recording rules — pre-compute expensive rate() / increase()
+    # ------------------------------------------------------------------
+    - name: dynagent.recording
+      interval: 30s
+      rules:
+        - record: dynagent:step_request_rate:5m
+          expr: rate(dynagent_step_requests_total[5m])
+
+        - record: dynagent:betaapo_decide_rate:5m
+          expr: rate(dynagent_betaapo_decide_requests_total[5m])
+
+        - record: dynagent:check_invariants_rate:5m
+          expr: rate(dynagent_check_invariants_requests_total[5m])
+
+        - record: dynagent:invariant_violations:5m
+          expr: increase(dynagent_invariant_violations_total[5m])
+
+        - record: dynagent:experiment_total_rate:5m
+          expr: |
+            sum(rate(dynagent_experiment_treatment_assign_requests_total[5m]))
+            + sum(rate(dynagent_experiment_eta_op_requests_total[5m]))
+            + sum(rate(dynagent_experiment_aug_err_sum_requests_total[5m]))
+            + sum(rate(dynagent_experiment_xcross_doubly_robust_requests_total[5m]))
+            + sum(rate(dynagent_experiment_sample_size_requests_total[5m]))
+
+    # ------------------------------------------------------------------
+    # Alerting rules — operator-facing
+    # ------------------------------------------------------------------
+    - name: dynagent.alerts.efficiency
+      interval: 30s
+      rules:
+        - alert: DynAgentEtaOpDegraded
+          # η^op (operational efficiency) が 0.1 を切ったまま 10 分
+          # 続いたら劣化 alert.  Phase 5 Task 5d 計算: R_int.numerator
+          # / Σ(error term numerators).  NaN (undefined) の時は < 0.1
+          # は false 評価で発火しない.  Phase 5 base rate 未計測なので
+          # 起点 0.1 で運用 → Task 6.post で再 calibrate.
+          expr: dynagent_experiment_eta_op_value < 0.1
+          for: 10m
+          labels:
+            severity: P2
+            component: dynagent-core
+            metric: eta_op
+          annotations:
+            summary: "η^op below 0.1 (operational efficiency degraded)"
+            description: |
+              Operational efficiency η^op = R_int.numerator / Σ(E_rep + E_ver + E_dec + E_hist) numerators
+              has stayed below 0.1 for 10 minutes on Haskell core last-call gauge.
+              Recent value: {{ $value }}. See FractalCategory Ch 19.5 / 19.1.6 for the
+              metric definition, and dashboard panel #21 (Python aggregate) / #22 (Haskell
+              gauge) for the time-series view.
+            runbook_url: "https://github.com/<org>/dynagent/blob/main/Ops/runbooks/eta_op_degraded.md"
+            dashboard: "/d/dynagent-phase6"
+
+    - name: dynagent.alerts.invariant
+      interval: 30s
+      rules:
+        - alert: DynAgentInvariantViolationSurge
+          # invariant violations が 5 分窓で 5 件超 (≒ 1/min 平均) を
+          # 5 分維持したら P1.  Phase 4 advisory only でも、急増は
+          # データ品質 / 契約破綻の signal なのでオンコール対応する.
+          # 起点 5 件 (= 1/min) は Phase 5 LLM 実走 base rate 未計測時
+          # の保守値、Phase 7 で base rate 観測後に refine.
+          expr: dynagent:invariant_violations:5m > 5
+          for: 5m
+          labels:
+            severity: P1
+            component: dynagent-core
+            metric: invariant_violations
+          annotations:
+            summary: "Invariant violations rate > 1/min (Trans-N regression hot zone)"
+            description: |
+              dynagent_invariant_violations_total has accumulated more than 5 events in the
+              last 5-minute window for at least 5 minutes (sustained ≥ 1/min average).
+              Recent 5-min increase: {{ $value }}.
+              Likely cause = a (Trans-1/Trans-2/Trans-3) detector firing on a regression
+              hot zone.  Drill into dashboard panel #30 (triage breakdown) and #40
+              (cumulative emission) to identify which detector / reason_code dominates.
+              Phase 4 is advisory only — the violations do NOT auto-Stop yet (C0356 §
+              未決事項), so the user-facing impact is data-quality drift, not hard failure.
+            runbook_url: "https://github.com/<org>/dynagent/blob/main/Ops/runbooks/invariant_surge.md"
+            dashboard: "/d/dynagent-phase6"
+
+        - alert: DynAgentInvariantViolationDoubled
+          # 24 時間平均と比較して 5 分窓 rate が 2x を超えたら P2.
+          # 絶対値 alert (DynAgentInvariantViolationSurge) と組み合わせ、
+          # baseline 自体が高い環境でも relative regression を検出.
+          expr: |
+            dynagent:invariant_violations:5m
+            > 2 * avg_over_time(dynagent:invariant_violations:5m[24h])
+          for: 10m
+          labels:
+            severity: P2
+            component: dynagent-core
+            metric: invariant_violations_relative
+          annotations:
+            summary: "Invariant violations rate ≥ 2× 24h baseline"
+            description: |
+              5-min violation count is more than twice the 24-hour rolling average for 10
+              minutes.  Use in combination with DynAgentInvariantViolationSurge to catch
+              regressions on top of a non-zero baseline.
+
+    - name: dynagent.alerts.latency
+      interval: 30s
+      rules:
+        - alert: DynAgentStepRequestRateAnomaly
+          # step latency p95 alert の Phase 6 proxy.  Haskell core は
+          # 現状 step_duration_seconds_bucket を expose していない
+          # (Phase 7 候補).  暫定的に step request rate の絶対値 100 RPS
+          # 超え + 10 分継続を「latency degradation の前駆 signal」と
+          # して見る — 実際 LLM cost が支配なので 100 RPS で latency
+          # 規模が崩れる可能性が高い (Task 6a §6a-① bench で 1 step
+          # ≒ 50ns kernel + JSON encode 1µs、I/O 込みで p95 数十ms
+          # が常用値、100 RPS = 1 capability per 10ms → 飽和近い).
+          expr: dynagent:step_request_rate:5m > 100
+          for: 10m
+          labels:
+            severity: P3
+            component: dynagent-core
+            metric: step_request_rate
+          annotations:
+            summary: "Haskell core step request rate > 100 RPS (latency proxy)"
+            description: |
+              Request rate on POST /step has exceeded 100 RPS over the last 5 minutes for
+              at least 10 minutes.  This is the Phase 6 latency proxy — the actual p95
+              histogram metric (dynagent_step_duration_seconds_bucket) lands in Phase 7
+              (Task 6f 着地時点では未実装).  Confirm with dashboard panel #31 (request rate
+              time series) + HPA scale-up event log.
+
+    - name: dynagent.alerts.availability
+      interval: 30s
+      rules:
+        - alert: DynAgentCoreDown
+          # absent() で /metrics が 2 分以上 scrape できなければ down 扱い.
+          # PrometheusRule の up{} 利用は kube-state-metrics 経由なので
+          # 短絡パスとして absent(health_counter) も併用.
+          expr: |
+            absent(dynagent_health_requests_total) == 1
+            or up{job=~"dynagent-core.*"} == 0
+          for: 2m
+          labels:
+            severity: P1
+            component: dynagent-core
+            metric: availability
+          annotations:
+            summary: "Haskell core /metrics unreachable (pod / scrape down)"
+            description: |
+              Prometheus could not scrape the Haskell core's /metrics endpoint for 2
+              minutes.  Either all replicas are down, or the ServiceMonitor / scrape
+              config is broken.  Check `kubectl get pods -l app.kubernetes.io/name=dynagent-core`
+              and the dynagent-core ServiceMonitor (Phase 6 Task 6d helm template).
+            runbook_url: "https://github.com/<org>/dynagent/blob/main/Ops/runbooks/core_down.md"

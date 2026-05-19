@@ -1,0 +1,48 @@
+# Grafana provisioning — Datasources (Phase 6 Task 6e).
+#
+# Two datasources support the dynagent_phase6 dashboard:
+#
+#   1. Prometheus       — scrapes Haskell core's /metrics endpoint.  See
+#                         scrape config in Ops/prometheus/scrape-configs/
+#                         or, if running prometheus-operator, the
+#                         ServiceMonitor provisioned by the
+#                         dynagent-core Helm chart (Phase 6 Task 6d).
+#
+#   2. marcusolsson-json-datasource — talks to the App FastAPI dashboard
+#                         routes (5 endpoints under /api/sessions/metrics/*).
+#                         This is the JSON-API plugin commonly used for
+#                         pulling values out of REST endpoints.  Install:
+#                         grafana-cli plugins install marcusolsson-json-datasource
+#                         (also handles auth via httpHeaderName/secureJsonData).
+#
+# Environment-specific URLs (https://api.dev.dynagent.work etc.) live
+# in Ops-internal/grafana/provisioning/datasources-cloud-{env}.yaml.
+
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    uid: dynagent-prometheus
+    access: proxy
+    url: http://prometheus.observability.svc.cluster.local:9090
+    isDefault: true
+    editable: false
+    jsonData:
+      httpMethod: POST
+      timeInterval: "15s"
+
+  - name: DynAgent App JSON
+    type: marcusolsson-json-datasource
+    uid: dynagent-app-json
+    access: proxy
+    url: http://dynagent.dynagent.svc.cluster.local
+    editable: false
+    jsonData:
+      httpHeaderName1: "Accept"
+    secureJsonData:
+      # JWT bearer for the dashboard service account.  Replace via
+      # `kubectl create secret` + Grafana environment lookup or rely on
+      # an internal-network "dashboard reader" anonymous role.  Phase 6
+      # Task 6e leaves the value blank — operator wires it on install.
+      httpHeaderValue1: ""
